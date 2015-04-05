@@ -25,15 +25,19 @@ class program:
 		self.folder_name = folder
 		self.playlist = None
 
-	def get_prog(self, prog_base_url="http://airnet.org.au/program/javascriptEmbed.php?station=3&view&rpid=", date_string=None):
+	def get_prog(self, date_string=''):
 		missing = []
-		self.prog_html = requests.get(prog_base_url + self.prog_name).text
+		self.tracks = []
+		self.existing_tracks = set()
+		# Calling with empty date string returns most recent episode
+		prog_url = 'http://airnet.org.au/program/javascriptEmbed.php?station=3&view=272&rpid=%s&jspage=%s' % (self.prog_name, date_string)  
+		self.prog_html = requests.get(prog_url).text
 		if date_string:
 			self.date_string = date_string
 		else:
-			match = re.search(r'<td class="trackShareUrl" style="display:none">http://2FBI.radiopages.info/\?an_page=(\d\d\d\d-\d\d-\d\d)__', self.prog_html)
+			match = re.search(r'<a href="http://fbiradio.com/programs/%s/(\d\d\d\d-\d\d-\d\d)/[^"]+" rel="nofollow">' % (self.prog_name), self.prog_html)
 			self.date_string = match.group(1)
-		pattern = re.compile(r'<a href="http://2FBI.radiopages.info/\?an_page=%s__[^"]+" rel="nofollow">([^<]+?) - ([^<]+)</a>' % (self.date_string))
+		pattern = re.compile(r'<a href="http://fbiradio.com/programs/%s/%s/[^"]+" rel="nofollow">([^-<]+) - ([^<]+)</a>' % (self.prog_name, self.date_string))
 		for (artist, track) in re.findall(pattern, self.prog_html):
 			orig_track = track
 			orig_artist = artist
@@ -81,6 +85,11 @@ class program:
 					new_index = index_count
 		self.playlist = container.add_new_playlist(self.list_name, new_index)
 
+	def get_dates(self):
+		html = requests.post('http://ondemand.fbiradio.com/fbipulse/pulse.php', data = {'show': self.prog_name}).text
+		pattern = re.compile(r'Program for (\d\d\d\d-\d\d-\d\d)')
+		self.dates = re.findall(pattern, html)
+		return self.dates
 
 	def add_tracks(self):
 		for t in self.tracks:
@@ -88,10 +97,9 @@ class program:
 				self.playlist.add_tracks([t])
 		self.session.process_events()
 
-
-p = program('utility-fog', folder="FBI")
-missing = p.get_prog()
+p = program('loose-joints', folder="FBI")
+p.get_prog('2015-03-08')
 p.get_playlist()
 p.add_tracks()
 p.session.logout()
-print missing
+p.session.process_events()
